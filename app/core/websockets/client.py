@@ -2,11 +2,9 @@ import asyncio
 import websockets
 import msgpack
 import uuid
-from pydantic import BaseModel
-from app.core.websockets.commands import Command, CommandType
+from datetime import datetime
 from app.core.config import settings
-from app.models.printer import PrinterListModel
-from app.services.printer_service import PrinterService
+from app.core.request_handler import RequestHandler
 
 class WebSocketClient:
     def __init__(self, base_url: str):
@@ -15,7 +13,7 @@ class WebSocketClient:
         self.agent_id = str(uuid.uuid4())  # Generate a unique ID for this agent
         self.url = f"{self.base_url}/{self.agent_id}"  # Include agent_id in the URL
         self.reconnect_interval = 5  # seconds
-        self.printer_service = PrinterService()
+        self.request_handler = RequestHandler()
 
     async def connect(self):
         while True:
@@ -44,16 +42,11 @@ class WebSocketClient:
                 
                 message = await self.websocket.recv()
                 data = msgpack.unpackb(message)
-
-                if data.get("type") == "pong":
-                    print("Received pong from server")
-                    continue
                 
                 if data["type"] == "request":
                     return data
                 
                 raise ValueError(f"Unexpected message type: {data.get('type')}")
-
 
             except websockets.exceptions.ConnectionClosed:
                 print("WebSocket connection closed. Attempting to reconnect...")
@@ -63,49 +56,21 @@ class WebSocketClient:
                 await asyncio.sleep(1)
 
     async def process_request(self, request: dict) -> dict:
-        """
-        Processes a request received from the WebSocket server and returns a response.
-        
-        The `process_request` method handles different types of requests received from the WebSocket server. It uses the `printer_service` to get the printer list or the status of a specific printer, and returns the appropriate response.
-        
-        If the request command is `GET_PRINTER_LIST`, the method returns a dictionary with the list of printers.
-        If the request command is `GET_PRINTER_STATUS`, the method returns the status of the printer specified in the request payload.
-        If the request command is unknown, the method returns a dictionary with an error message.
-        
-        Args:
-            request (dict): The request received from the WebSocket server.
-        
-        Returns:
-            dict: The response to the request.
-        """
         command = request["command"]
         payload = request["payload"]
 
-        if command == CommandType.GET_PRINTER_LIST.value:
-            printer_list: PrinterListModel = await self.printer_service.get_printer_list()
-            return {
-                "type": "response",
-                "id": request["id"],
-                "command": command,
-                "payload": {"printers": printer_list.model_dump()["printers"]}
-            }
-        elif command == CommandType.GET_PRINTER_STATUS.value:
-            printer_id = payload.get("printer_id")
-            printer_status =  self.printer_service.get_printer_status(printer_id)
-            return {
-                "type": "response",
-                "id": request["id"],
-                "command": command,
-                "payload": printer_status
-            }
-            
-        else:
-             return {
-                "type": "response",
-                "id": request["id"],
-                "command": command,
-                "payload": {"error": f"Unknown command ({command})"}
-            }
+        handler_response = await self.request_handler.handle_request(command, payload)
+
+        return {
+            "type": "response",
+            "version": "1.0",
+            "id": request["id"],
+            "timestamp": datetime.now(datetime.UTC.isoformat()),
+            "command": command,
+            "processing_time": handler_response["processing_time"],
+            "status": handler_response["status"],
+            "payload": handler_response["payload"]
+        }
 
     async def send_response(self, response: dict):
         while True:
