@@ -86,3 +86,6 @@ venv.bak/
 # Operating System Files
 .DS_Store
 Thumbs.db
+
+# Local files
+.local/
