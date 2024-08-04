@@ -2,7 +2,7 @@ import asyncio
 import websockets
 import msgpack
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from app.core.config import settings
 from app.core.request_handler import RequestHandler
 
@@ -65,7 +65,7 @@ class WebSocketClient:
             "type": "response",
             "version": "1.0",
             "id": request["id"],
-            "timestamp": datetime.now(datetime.UTC.isoformat()),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "command": command,
             "processing_time": handler_response["processing_time"],
             "status": handler_response["status"],
@@ -86,27 +86,6 @@ class WebSocketClient:
             except Exception as e:
                 print(f"Error sending response: {e}")
                 await asyncio.sleep(1)
-
-    async def ping(self):
-        try:
-            if not self.websocket:
-                await self.connect()
-            
-            await self.websocket.send(msgpack.packb({"type": "ping"}))
-            print("Ping sent to server")
-        except websockets.exceptions.ConnectionClosed:
-            print("WebSocket connection closed during ping. Attempting to reconnect...")
-            await self.connect()
-        except Exception as e:
-            print(f"Error sending ping: {e}")
-
-    async def start_ping_loop(self):
-        if settings.ENABLE_PING:
-            while True:
-                await self.ping()
-                await asyncio.sleep(settings.PING_INTERVAL)
-        else:
-            print("Ping functionality is disabled")
 
     async def run(self):
         while True:

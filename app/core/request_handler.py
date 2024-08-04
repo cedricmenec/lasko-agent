@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from app.core.websockets.commands import CommandType
 from app.models.printer import PrinterListModel
 from app.services.printer_service import PrinterService
@@ -8,7 +8,7 @@ class RequestHandler:
         self.printer_service = PrinterService()
 
     async def handle_request(self, command: str, payload: dict) -> dict:
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
 
         if command == "health-check":
             response_payload = await self.handle_health_check()
@@ -19,7 +19,7 @@ class RequestHandler:
         else:
             response_payload = {"error": f"Unknown command ({command})"}
 
-        end_time = datetime.now(datetime.UTC)
+        end_time = datetime.now(timezone.utc)
         processing_time = (end_time - start_time).total_seconds()
 
         return {
